@@ -79,4 +79,4 @@ def _send_all(subs, payload: str) -> None:
     if dead:
         with get_db() as db:
             for endpoint in dead:
-                db.execute(                "DELETE FROM push_subs WHERE endpoint = %s", (endpoint,))
+                db.execute("DELETE FROM push_subs WHERE endpoint = %s", (endpoint,))

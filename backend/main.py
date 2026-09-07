@@ -155,12 +155,11 @@ def get_match_or_404(db, match_id: int, user_id: int):
 def log_activity(db, type_: str, text: str) -> dict:
     """Journalise un événement et le pousse en direct aux admins connectés."""
     cur = db.execute(
-        "INSERT INTO activity (type, text) VALUES (%s, %s) RETURNING id", (type_, text)
+        "INSERT INTO activity (type, text) VALUES (%s, %s) "
+        "RETURNING id, type, text, created_at",
+        (type_, text),
     )
-    event = db.execute(
-        "SELECT id, type, text, created_at FROM activity WHERE id = %s",
-        (cur.fetchone()["id"],),
-    ).fetchone()
+    event = cur.fetchone()
     notify_admins({"type": "activity", "event": dict(event)})
     return dict(event)
 
