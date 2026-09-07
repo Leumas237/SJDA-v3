@@ -6,6 +6,7 @@ import json
 import secrets
 from pathlib import Path
 
+from psycopg.errors import UniqueViolation
 from fastapi import (
     FastAPI,
     Form,
@@ -119,7 +120,7 @@ def photos_map(db, user_ids: list[int]) -> dict[int, list[str]]:
     """URLs des photos de chaque utilisateur, dans l'ordre."""
     if not user_ids:
         return {}
-    marks = ",".join("?" * len(user_ids))
+    marks = ",".join("%s" for _ in user_ids)
     rows = db.execute(
         f"SELECT user_id, filename FROM photos WHERE user_id IN ({marks}) "
         "ORDER BY position, id",
@@ -143,7 +144,7 @@ def student_email_ok(email: str) -> bool:
 
 def get_match_or_404(db, match_id: int, user_id: int):
     match = db.execute(
-        "SELECT * FROM matches WHERE id = ? AND closed = 0 AND (user_a = ? OR user_b = ?)",
+        "SELECT * FROM matches WHERE id = %s AND closed = 0 AND (user_a = %s OR user_b = %s)",
         (match_id, user_id, user_id),
     ).fetchone()
     if not match:
@@ -154,11 +155,11 @@ def get_match_or_404(db, match_id: int, user_id: int):
 def log_activity(db, type_: str, text: str) -> dict:
     """Journalise un événement et le pousse en direct aux admins connectés."""
     cur = db.execute(
-        "INSERT INTO activity (type, text) VALUES (?, ?)", (type_, text)
+        "INSERT INTO activity (type, text) VALUES (%s, %s) RETURNING id", (type_, text)
     )
     event = db.execute(
-        "SELECT id, type, text, created_at FROM activity WHERE id = ?",
-        (cur.lastrowid,),
+        "SELECT id, type, text, created_at FROM activity WHERE id = %s",
+        (cur.fetchone()["id"],),
     ).fetchone()
     notify_admins({"type": "activity", "event": dict(event)})
     return dict(event)
@@ -187,14 +188,14 @@ def register(body: RegisterIn):
         try:
             cur = db.execute(
                 "INSERT INTO users (email, password_hash, salt, name, is_admin, approved) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                 # les admins sont validés d'office ; les élèves attendent
                 (email, pw_hash, salt, name, is_admin, is_admin),
             )
-        except Exception:
+        except UniqueViolation:
             raise HTTPException(status_code=409, detail="Cet email est déjà inscrit")
-        user_id = cur.lastrowid
-        db.execute("INSERT INTO profiles (user_id) VALUES (?)", (user_id,))
+        user_id = cur.fetchone()["id"]
+        db.execute("INSERT INTO profiles (user_id) VALUES (%s)", (user_id,))
         if is_admin:
             log_activity(db, "signup", f"{name} s'est inscrit·e")
         else:
@@ -217,7 +218,7 @@ def login(body: LoginIn):
     email = body.email.lower()
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE email = ?", (email,)
+            "SELECT * FROM users WHERE email = %s", (email,)
         ).fetchone()
         if not user or not auth.verify_password(
             body.password, user["salt"], user["password_hash"]
@@ -229,7 +230,7 @@ def login(body: LoginIn):
         # (jamais de rétrogradation ici : les modos par code le restent)
         if not user["is_admin"] and email in config.ADMIN_EMAILS:
             db.execute(
-                "UPDATE users SET is_admin = 1, approved = 1 WHERE id = ?",
+                "UPDATE users SET is_admin = 1, approved = 1 WHERE id = %s",
                 (user["id"],),
             )
     return {"token": auth.create_session(user["id"]), "user_id": user["id"]}
@@ -250,19 +251,19 @@ def me(user_id: int = auth.CurrentUser):
     with get_db() as db:
         row = db.execute(
             "SELECT p.*, u.name, u.is_admin, u.approved FROM profiles p "
-            "JOIN users u ON u.id = p.user_id WHERE p.user_id = ?",
+            "JOIN users u ON u.id = p.user_id WHERE p.user_id = %s",
             (user_id,),
         ).fetchone()
         my_photos = [
             {"id": r["id"], "url": f"/uploads/{r['filename']}"}
             for r in db.execute(
-                "SELECT id, filename FROM photos WHERE user_id = ? "
+                "SELECT id, filename FROM photos WHERE user_id = %s "
                 "ORDER BY position, id",
                 (user_id,),
             ).fetchall()
         ]
         kyi_row = db.execute(
-            "SELECT 1 FROM kyi WHERE user_id = ?", (user_id,)
+            "SELECT 1 FROM kyi WHERE user_id = %s", (user_id,)
         ).fetchone()
     return {
         **profile_dict(row, socials=True, photos=[p["url"] for p in my_photos]),
@@ -284,11 +285,11 @@ def require_kyi(db, user_id: int) -> None:
     """La personnalisation du compte est bloquée tant que le dossier
     d'identité (KYI) n'a pas été soumis. Les comptes validés passent."""
     user = db.execute(
-        "SELECT approved FROM users WHERE id = ?", (user_id,)
+        "SELECT approved FROM users WHERE id = %s", (user_id,)
     ).fetchone()
     if user and user["approved"]:
         return
-    if not db.execute("SELECT 1 FROM kyi WHERE user_id = ?", (user_id,)).fetchone():
+    if not db.execute("SELECT 1 FROM kyi WHERE user_id = %s", (user_id,)).fetchone():
         raise HTTPException(
             status_code=403,
             detail="Complète d'abord ta vérification d'identité (KYI)",
@@ -315,15 +316,18 @@ async def submit_kyi(
     (config.KYI_DIR / filename).write_bytes(data)
     with get_db() as db:
         old = db.execute(
-            "SELECT card_photo FROM kyi WHERE user_id = ?", (user_id,)
+            "SELECT card_photo FROM kyi WHERE user_id = %s", (user_id,)
         ).fetchone()
         db.execute(
-            "INSERT OR REPLACE INTO kyi (user_id, full_name, birthdate, classe, card_photo) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO kyi (user_id, full_name, birthdate, classe, card_photo) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (user_id) DO UPDATE SET full_name = EXCLUDED.full_name, "
+            "birthdate = EXCLUDED.birthdate, classe = EXCLUDED.classe, "
+            "card_photo = EXCLUDED.card_photo, submitted_at = CURRENT_TIMESTAMP",
             (user_id, full_name.strip(), birthdate.strip(), classe.strip(), filename),
         )
         name = db.execute(
-            "SELECT name FROM users WHERE id = ?", (user_id,)
+            "SELECT name FROM users WHERE id = %s", (user_id,)
         ).fetchone()["name"]
         log_activity(db, "kyi", f"🪪 {name} a soumis son dossier d'inscription")
         push.push_to_users(
@@ -352,9 +356,9 @@ def update_profile(body: ProfileIn, user_id: int = auth.CurrentUser):
     with get_db() as db:
         require_kyi(db, user_id)
         db.execute(
-            "UPDATE profiles SET bio = ?, classe = ?, interests = ?, intent = ?, "
-            "gender = ?, seeking = ?, instagram = ?, snapchat = ?, whatsapp = ?, "
-            "age = ?, invisible = ? WHERE user_id = ?",
+            "UPDATE profiles SET bio = %s, classe = %s, interests = %s, intent = %s, "
+            "gender = %s, seeking = %s, instagram = %s, snapchat = %s, whatsapp = %s, "
+            "age = %s, invisible = %s WHERE user_id = %s",
             (
                 body.bio.strip(),
                 body.classe.strip(),
@@ -388,7 +392,7 @@ async def upload_photo(photo: UploadFile, user_id: int = auth.CurrentUser):
     with get_db() as db:
         require_kyi(db, user_id)
         count = db.execute(
-            "SELECT COUNT(*) c FROM photos WHERE user_id = ?", (user_id,)
+            "SELECT COUNT(*) c FROM photos WHERE user_id = %s", (user_id,)
         ).fetchone()["c"]
         if count >= MAX_PHOTOS:
             raise HTTPException(
@@ -396,22 +400,22 @@ async def upload_photo(photo: UploadFile, user_id: int = auth.CurrentUser):
             )
         (config.UPLOADS_DIR / filename).write_bytes(data)
         cur = db.execute(
-            "INSERT INTO photos (user_id, filename, position) VALUES (?, ?, ?)",
+            "INSERT INTO photos (user_id, filename, position) VALUES (%s, %s, %s) RETURNING id",
             (user_id, filename, count),
         )
-    return {"id": cur.lastrowid, "url": f"/uploads/{filename}"}
+    return {"id": cur.fetchone()["id"], "url": f"/uploads/{filename}"}
 
 
 @app.delete("/api/profile/photos/{photo_id}")
 def delete_photo(photo_id: int, user_id: int = auth.CurrentUser):
     with get_db() as db:
         row = db.execute(
-            "SELECT filename FROM photos WHERE id = ? AND user_id = ?",
+            "SELECT filename FROM photos WHERE id = %s AND user_id = %s",
             (photo_id, user_id),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Photo introuvable")
-        db.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
+        db.execute("DELETE FROM photos WHERE id = %s", (photo_id,))
     (config.UPLOADS_DIR / row["filename"]).unlink(missing_ok=True)
     return {"ok": True}
 
@@ -422,7 +426,7 @@ def delete_account(body: DeleteAccountIn, user_id: int = auth.CurrentUser):
     dossier KYI, matchs et abonnements push."""
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE id = ?", (user_id,)
+            "SELECT * FROM users WHERE id = %s", (user_id,)
         ).fetchone()
         if not auth.verify_password(
             body.password, user["salt"], user["password_hash"]
@@ -431,17 +435,17 @@ def delete_account(body: DeleteAccountIn, user_id: int = auth.CurrentUser):
         photo_files = [
             r["filename"]
             for r in db.execute(
-                "SELECT filename FROM photos WHERE user_id = ?", (user_id,)
+                "SELECT filename FROM photos WHERE user_id = %s", (user_id,)
             ).fetchall()
         ]
         kyi_row = db.execute(
-            "SELECT card_photo FROM kyi WHERE user_id = ?", (user_id,)
+            "SELECT card_photo FROM kyi WHERE user_id = %s", (user_id,)
         ).fetchone()
         legacy = db.execute(
-            "SELECT photo FROM profiles WHERE user_id = ?", (user_id,)
+            "SELECT photo FROM profiles WHERE user_id = %s", (user_id,)
         ).fetchone()
         log_activity(db, "delete", f"🗑️ {user['name']} a supprimé son compte")
-        db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        db.execute("DELETE FROM users WHERE id = %s", (user_id,))
     for f in photo_files:
         (config.UPLOADS_DIR / f).unlink(missing_ok=True)
     if legacy and legacy["photo"]:
@@ -475,15 +479,15 @@ def discover(
     Les filtres d'âge n'excluent pas les profils sans âge renseigné."""
     with get_db() as db:
         my = db.execute(
-            "SELECT * FROM profiles WHERE user_id = ?", (user_id,)
+            "SELECT * FROM profiles WHERE user_id = %s", (user_id,)
         ).fetchone()
         rows = db.execute(
             "SELECT p.*, u.name, "
-            "(u.last_seen >= datetime('now', '-3 days')) AS active_recent "
+            "(u.last_seen >= CURRENT_TIMESTAMP - INTERVAL '3 days') AS active_recent "
             "FROM profiles p JOIN users u ON u.id = p.user_id "
-            "WHERE p.user_id != ? AND u.banned = 0 AND u.approved = 1 "
+            "WHERE p.user_id != %s AND u.banned = 0 AND u.approved = 1 "
             "AND p.invisible = 0 "
-            "AND p.user_id NOT IN (SELECT target_id FROM swipes WHERE swiper_id = ?) "
+            "AND p.user_id NOT IN (SELECT target_id FROM swipes WHERE swiper_id = %s) "
             "ORDER BY RANDOM() LIMIT 60",
             (user_id, user_id),
         ).fetchall()
@@ -527,9 +531,9 @@ def likes_me(user_id: int = auth.CurrentApproved):
             SELECT COUNT(*) c FROM swipes s
             JOIN users u ON u.id = s.swiper_id
             JOIN profiles p ON p.user_id = s.swiper_id
-            WHERE s.target_id = ? AND s.liked = 1
+            WHERE s.target_id = %s AND s.liked = 1
               AND u.banned = 0 AND u.approved = 1 AND p.invisible = 0
-              AND s.swiper_id NOT IN (SELECT target_id FROM swipes WHERE swiper_id = ?)
+              AND s.swiper_id NOT IN (SELECT target_id FROM swipes WHERE swiper_id = %s)
             """,
             (user_id, user_id),
         ).fetchone()["c"]
@@ -543,7 +547,7 @@ def swipe(body: SwipeIn, user_id: int = auth.CurrentApproved):
     with get_db() as db:
         me_row = db.execute(
             "SELECT p.invisible, u.name FROM profiles p "
-            "JOIN users u ON u.id = p.user_id WHERE p.user_id = ?",
+            "JOIN users u ON u.id = p.user_id WHERE p.user_id = %s",
             (user_id,),
         ).fetchone()
         if me_row["invisible"]:
@@ -554,35 +558,38 @@ def swipe(body: SwipeIn, user_id: int = auth.CurrentApproved):
         if body.liked:
             enforce_like_quota(db, user_id, me_row["name"])
         target = db.execute(
-            "SELECT id FROM users WHERE id = ?", (body.target_id,)
+            "SELECT id FROM users WHERE id = %s", (body.target_id,)
         ).fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="Utilisateur introuvable")
         db.execute(
-            "INSERT OR REPLACE INTO swipes (swiper_id, target_id, liked) VALUES (?, ?, ?)",
+            "INSERT INTO swipes (swiper_id, target_id, liked) VALUES (%s, %s, %s) "
+            "ON CONFLICT (swiper_id, target_id) DO UPDATE SET liked = EXCLUDED.liked, "
+            "created_at = CURRENT_TIMESTAMP",
             (user_id, body.target_id, int(body.liked)),
         )
         matched = False
         match_id = None
         if body.liked:
             reciprocal = db.execute(
-                "SELECT 1 FROM swipes WHERE swiper_id = ? AND target_id = ? AND liked = 1",
+                "SELECT 1 FROM swipes WHERE swiper_id = %s AND target_id = %s AND liked = 1",
                 (body.target_id, user_id),
             ).fetchone()
             if reciprocal:
                 a, b = sorted((user_id, body.target_id))
                 db.execute(
-                    "INSERT OR IGNORE INTO matches (user_a, user_b) VALUES (?, ?)",
+                    "INSERT INTO matches (user_a, user_b) VALUES (%s, %s) "
+                    "ON CONFLICT (user_a, user_b) DO NOTHING",
                     (a, b),
                 )
                 match_id = db.execute(
-                    "SELECT id FROM matches WHERE user_a = ? AND user_b = ?", (a, b)
+                    "SELECT id FROM matches WHERE user_a = %s AND user_b = %s", (a, b)
                 ).fetchone()["id"]
                 matched = True
                 names = {
                     r["id"]: r["name"]
                     for r in db.execute(
-                        "SELECT id, name FROM users WHERE id IN (?, ?)", (a, b)
+                        "SELECT id, name FROM users WHERE id IN (%s, %s)", (a, b)
                     ).fetchall()
                 }
                 log_activity(db, "match", f"Match entre {names[a]} et {names[b]}")
@@ -601,14 +608,14 @@ def enforce_like_quota(db, user_id: int, name: str) -> None:
     """Quota quotidien de likes. S'acharner au-delà du quota accumule des
     strikes ; trop de strikes = suspension automatique pour spam."""
     today_likes = db.execute(
-        "SELECT COUNT(*) c FROM swipes WHERE swiper_id = ? AND liked = 1 "
-        "AND created_at >= datetime('now', 'start of day')",
+        "SELECT COUNT(*) c FROM swipes WHERE swiper_id = %s AND liked = 1 "
+        "AND created_at >= CURRENT_DATE",
         (user_id,),
     ).fetchone()["c"]
     if today_likes < config.DAILY_LIKES:
         return
     strikes = db.execute(
-        "UPDATE users SET spam_strikes = spam_strikes + 1 WHERE id = ? "
+        "UPDATE users SET spam_strikes = spam_strikes + 1 WHERE id = %s "
         "RETURNING spam_strikes",
         (user_id,),
     ).fetchone()["spam_strikes"]
@@ -636,22 +643,22 @@ def rewind(user_id: int = auth.CurrentApproved):
     """Annule le dernier swipe (façon Tinder) et rend la carte."""
     with get_db() as db:
         last = db.execute(
-            "SELECT * FROM swipes WHERE swiper_id = ? "
-            "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            "SELECT * FROM swipes WHERE swiper_id = %s "
+            "ORDER BY created_at DESC LIMIT 1",
             (user_id,),
         ).fetchone()
         if not last:
             raise HTTPException(status_code=404, detail="Rien à annuler")
         db.execute(
-            "DELETE FROM swipes WHERE swiper_id = ? AND target_id = ?",
+            "DELETE FROM swipes WHERE swiper_id = %s AND target_id = %s",
             (user_id, last["target_id"]),
         )
         # si ce swipe avait créé un match, on le retire aussi
         a, b = sorted((user_id, last["target_id"]))
-        db.execute("DELETE FROM matches WHERE user_a = ? AND user_b = ?", (a, b))
+        db.execute("DELETE FROM matches WHERE user_a = %s AND user_b = %s", (a, b))
         row = db.execute(
             "SELECT p.*, u.name FROM profiles p JOIN users u ON u.id = p.user_id "
-            "WHERE p.user_id = ?",
+            "WHERE p.user_id = %s",
             (last["target_id"],),
         ).fetchone()
         pmap = photos_map(db, [last["target_id"]])
@@ -668,9 +675,9 @@ def list_matches(user_id: int = auth.CurrentApproved):
             """
             SELECT m.id AS match_id, m.created_at, p.*, u.name
             FROM matches m
-            JOIN profiles p ON p.user_id = CASE WHEN m.user_a = ? THEN m.user_b ELSE m.user_a END
+            JOIN profiles p ON p.user_id = CASE WHEN m.user_a = %s THEN m.user_b ELSE m.user_a END
             JOIN users u ON u.id = p.user_id
-            WHERE m.closed = 0 AND (m.user_a = ? OR m.user_b = ?)
+            WHERE m.closed = 0 AND (m.user_a = %s OR m.user_b = %s)
             ORDER BY m.id DESC
             """,
             (user_id, user_id, user_id),
@@ -702,7 +709,8 @@ def push_subscribe(sub: dict, user_id: int = auth.CurrentUser):
         raise HTTPException(status_code=422, detail="Abonnement invalide")
     with get_db() as db:
         db.execute(
-            "INSERT OR REPLACE INTO push_subs (endpoint, user_id, sub) VALUES (?, ?, ?)",
+            "INSERT INTO push_subs (endpoint, user_id, sub) VALUES (%s, %s, %s) "
+            "ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, sub = EXCLUDED.sub",
             (endpoint, user_id, json.dumps(sub)),
         )
     return {"ok": True}
@@ -712,7 +720,7 @@ def push_subscribe(sub: dict, user_id: int = auth.CurrentUser):
 def push_unsubscribe(sub: dict, user_id: int = auth.CurrentUser):
     with get_db() as db:
         db.execute(
-            "DELETE FROM push_subs WHERE endpoint = ? AND user_id = ?",
+            "DELETE FROM push_subs WHERE endpoint = %s AND user_id = %s",
             (sub.get("endpoint", ""), user_id),
         )
     return {"ok": True}
@@ -729,20 +737,22 @@ def report(body: ReportIn, user_id: int = auth.CurrentApproved):
         reported = match["user_b"] if match["user_a"] == user_id else match["user_a"]
         db.execute(
             "INSERT INTO reports (reporter_id, reported_id, match_id, reason) "
-            "VALUES (?, ?, ?, ?)",
+            "VALUES (%s, %s, %s, %s)",
             (user_id, reported, body.match_id, body.reason.strip()),
         )
-        db.execute("UPDATE matches SET closed = 1 WHERE id = ?", (body.match_id,))
+        db.execute("UPDATE matches SET closed = 1 WHERE id = %s", (body.match_id,))
         for a, b in ((user_id, reported), (reported, user_id)):
             db.execute(
-                "INSERT OR REPLACE INTO swipes (swiper_id, target_id, liked) "
-                "VALUES (?, ?, 0)",
+                "INSERT INTO swipes (swiper_id, target_id, liked) "
+                "VALUES (%s, %s, 0) "
+                "ON CONFLICT (swiper_id, target_id) DO UPDATE SET liked = 0, "
+                "created_at = CURRENT_TIMESTAMP",
                 (a, b),
             )
         names = {
             r["id"]: r["name"]
             for r in db.execute(
-                "SELECT id, name FROM users WHERE id IN (?, ?)", (user_id, reported)
+                "SELECT id, name FROM users WHERE id IN (%s, %s)", (user_id, reported)
             ).fetchall()
         }
         log_activity(
@@ -811,12 +821,12 @@ def admin_handle_report(
         raise HTTPException(status_code=422, detail="Action invalide")
     with get_db() as db:
         rep = db.execute(
-            "SELECT * FROM reports WHERE id = ?", (report_id,)
+            "SELECT * FROM reports WHERE id = %s", (report_id,)
         ).fetchone()
         if not rep:
             raise HTTPException(status_code=404, detail="Signalement introuvable")
         db.execute(
-            "UPDATE reports SET status = ? WHERE id = ?",
+            "UPDATE reports SET status = %s WHERE id = %s",
             ("banned" if body.action == "ban" else "dismissed", report_id),
         )
         if body.action == "ban":
@@ -861,7 +871,7 @@ def admin_kyi_card(target_id: int, admin_id: int = auth.CurrentAdmin):
     """Photo de la carte d'étudiant : accessible uniquement aux modos."""
     with get_db() as db:
         row = db.execute(
-            "SELECT card_photo FROM kyi WHERE user_id = ?", (target_id,)
+            "SELECT card_photo FROM kyi WHERE user_id = %s", (target_id,)
         ).fetchone()
     if not row or not row["card_photo"]:
         raise HTTPException(status_code=404, detail="Carte introuvable")
@@ -875,12 +885,12 @@ def admin_kyi_card(target_id: int, admin_id: int = auth.CurrentAdmin):
 def admin_approve(target_id: int, body: ApproveIn, admin_id: int = auth.CurrentAdmin):
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE id = ? AND approved = 0", (target_id,)
+            "SELECT * FROM users WHERE id = %s AND approved = 0", (target_id,)
         ).fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="Demande introuvable")
         if body.approve:
-            db.execute("UPDATE users SET approved = 1 WHERE id = ?", (target_id,))
+            db.execute("UPDATE users SET approved = 1 WHERE id = %s", (target_id,))
             log_activity(db, "approve", f"✅ {user['name']} a été accepté·e")
             push.push_to_users(
                 [target_id], "Inscription acceptée ✅",
@@ -889,11 +899,11 @@ def admin_approve(target_id: int, body: ApproveIn, admin_id: int = auth.CurrentA
         else:
             # refus : le compte, son profil et sa carte d'étudiant sont supprimés
             kyi_row = db.execute(
-                "SELECT card_photo FROM kyi WHERE user_id = ?", (target_id,)
+                "SELECT card_photo FROM kyi WHERE user_id = %s", (target_id,)
             ).fetchone()
             if kyi_row and kyi_row["card_photo"]:
                 (config.KYI_DIR / kyi_row["card_photo"]).unlink(missing_ok=True)
-            db.execute("DELETE FROM users WHERE id = ?", (target_id,))
+            db.execute("DELETE FROM users WHERE id = %s", (target_id,))
             log_activity(db, "approve", f"❌ La demande de {user['name']} a été refusée")
     return {"ok": True}
 
@@ -920,12 +930,12 @@ def admin_mod(target_id: int, body: ModIn, admin_id: int = auth.CurrentAdmin):
         raise HTTPException(status_code=422, detail="Impossible de se modifier soi-même")
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE id = ?", (target_id,)
+            "SELECT * FROM users WHERE id = %s", (target_id,)
         ).fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur introuvable")
         db.execute(
-            "UPDATE users SET is_admin = ? WHERE id = ?",
+            "UPDATE users SET is_admin = %s WHERE id = %s",
             (int(body.is_admin), target_id),
         )
         verb = "promu·e modérateur·rice" if body.is_admin else "retiré·e des modérateurs"
@@ -939,14 +949,14 @@ def admin_ban(target_id: int, body: BanIn, admin_id: int = auth.CurrentAdmin):
         raise HTTPException(status_code=422, detail="Impossible de se bannir soi-même")
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE id = ?", (target_id,)
+            "SELECT * FROM users WHERE id = %s", (target_id,)
         ).fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur introuvable")
         if body.banned:
             ban_user(db, target_id)
         else:
-            db.execute("UPDATE users SET banned = 0 WHERE id = ?", (target_id,))
+            db.execute("UPDATE users SET banned = 0 WHERE id = %s", (target_id,))
             log_activity(db, "ban", f"{user['name']} a été rétabli·e")
     return {"ok": True}
 
@@ -954,9 +964,9 @@ def admin_ban(target_id: int, body: BanIn, admin_id: int = auth.CurrentAdmin):
 def ban_user(db, target_id: int) -> None:
     """Suspend le compte : plus de connexion, sessions coupées,
     invisible dans la découverte."""
-    user = db.execute("SELECT name FROM users WHERE id = ?", (target_id,)).fetchone()
-    db.execute("UPDATE users SET banned = 1 WHERE id = ?", (target_id,))
-    db.execute("DELETE FROM sessions WHERE user_id = ?", (target_id,))
+    user = db.execute("SELECT name FROM users WHERE id = %s", (target_id,)).fetchone()
+    db.execute("UPDATE users SET banned = 1 WHERE id = %s", (target_id,))
+    db.execute("DELETE FROM sessions WHERE user_id = %s", (target_id,))
     log_activity(db, "ban", f"🚫 {user['name']} a été banni·e")
 
 
@@ -1007,7 +1017,7 @@ async def websocket_endpoint(ws: WebSocket, token: str = ""):
         return
     with get_db() as db:
         row = db.execute(
-            "SELECT is_admin FROM users WHERE id = ?", (user_id,)
+            "SELECT is_admin FROM users WHERE id = %s", (user_id,)
         ).fetchone()
     is_admin = bool(row and row["is_admin"])
     await ws.accept()

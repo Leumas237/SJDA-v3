@@ -7,7 +7,7 @@ DATA_DIR = Path(os.environ.get("SJDA_DATA_DIR", BASE_DIR / "data"))
 UPLOADS_DIR = DATA_DIR / "uploads"
 # cartes d'étudiant du KYI : jamais servies publiquement, accès modos uniquement
 KYI_DIR = DATA_DIR / "kyi"
-DB_PATH = DATA_DIR / "sjda.db"
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SJDA_DATABASE_URL", "")
 
 APP_NAME = os.environ.get("SJDA_APP_NAME", "SJDA")
 
