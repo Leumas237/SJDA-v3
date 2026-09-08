@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
     approved      INTEGER NOT NULL DEFAULT 0,
     last_seen     TIMESTAMPTZ NOT NULL DEFAULT 'epoch',
     spam_strikes  INTEGER NOT NULL DEFAULT 0,
+    privacy_consent_at TIMESTAMPTZ,
+    privacy_version TEXT NOT NULL DEFAULT '2026-09-08',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -101,6 +103,11 @@ CREATE TABLE IF NOT EXISTS activity (
 );
 """
 
+MIGRATIONS = (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_consent_at TIMESTAMPTZ",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_version TEXT NOT NULL DEFAULT '2026-09-08'",
+)
+
 
 def init_db() -> None:
     if not DATABASE_URL:
@@ -112,6 +119,8 @@ def init_db() -> None:
             statement = statement.strip()
             if statement:
                 db.execute(statement)
+        for statement in MIGRATIONS:
+            db.execute(statement)
 
 
 @contextmanager

@@ -95,6 +95,7 @@ Démarrage sans Docker : `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 | `SJDA_APP_NAME` | `SJDA` | Nom affiché de l'app |
 | `DATABASE_URL` | *(requis)* | URL de connexion PostgreSQL |
 | `SJDA_DATA_DIR` | `./data` | Dossier des photos, cartes KYI et clés VAPID |
+| `SJDA_SUPPORT_EMAIL` | `sdja.beta@protonmail.com` | Adresse de support affichée dans l'application |
 
 L'inscription exige un email étudiant d'un des domaines — sauf pour les
 emails de `SJDA_ADMIN_EMAILS` et pour qui fournit le bon `SJDA_MOD_CODE`.
@@ -145,6 +146,9 @@ avant un match mutuel.
 - Mots de passe hachés (PBKDF2, 200 000 itérations), jamais stockés en clair
 - Les réseaux sociaux (Insta/Snap/WhatsApp) ne sont exposés qu'aux matchs
 - Les photos sont limitées à 5 Mo (JPEG/PNG/WebP)
+- La politique de confidentialité est accessible sur `/privacy`, avec
+  consentement obligatoire à l'inscription, export des données depuis le profil
+  et suppression définitive du compte.
 - Pense à rappeler les règles de respect dans ta communication : l'app est
   faite pour créer du lien, pas pour harceler 💛
 

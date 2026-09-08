@@ -91,6 +91,7 @@ $("form-register").addEventListener("submit", async (e) => {
         email: $("reg-email").value,
         password: $("reg-password").value,
         invite_code: $("reg-invite").value,
+        privacy_consent: $("reg-consent").checked,
       },
     });
     onLoggedIn(data, true);
@@ -137,6 +138,22 @@ $("btn-delete-account").onclick = async () => {
     await api("/account/delete", { method: "POST", json: { password } });
     alert("Compte supprimé. Prends soin de toi 👋");
     logout();
+  } catch (err) { alert(err.message); }
+};
+
+$("btn-export-account").onclick = async () => {
+  try {
+    const res = await fetch("/api/account/export", {
+      headers: { Authorization: "Bearer " + state.token },
+    });
+    if (!res.ok) throw new Error("Impossible d'exporter tes données");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "sjda-donnees.json";
+    link.click();
+    URL.revokeObjectURL(url);
   } catch (err) { alert(err.message); }
 };
 $("btn-waiting-profile").onclick = () => { show("profile"); fillProfileForm(); };

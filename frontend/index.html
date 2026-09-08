@@ -35,6 +35,11 @@
           <p id="reg-hint" class="muted reg-hint"></p>
           <input type="password" id="reg-password" placeholder="Mot de passe (8 caractères min.)" required minlength="8" autocomplete="new-password">
           <input type="text" id="reg-invite" placeholder="Code d'invitation (optionnel)">
+          <label class="consent-line">
+            <input type="checkbox" id="reg-consent" required>
+            <span>J'accepte la <a href="/privacy" target="_blank" rel="noopener">politique de confidentialité</a>
+            et le traitement de mes données pour faire fonctionner SJDA.</span>
+          </label>
           <button type="submit" class="btn-primary">Créer mon compte</button>
         </form>
 
@@ -190,6 +195,8 @@
         <p id="profile-saved" class="success hidden">Profil enregistré ✔</p>
         <button type="button" id="btn-logout" class="btn-ghost">Se déconnecter</button>
         <button type="button" id="btn-delete-account" class="btn-ghost danger-text">Supprimer mon compte</button>
+        <button type="button" id="btn-export-account" class="btn-ghost">Télécharger mes données</button>
+        <p class="muted support-line">Support : <a href="mailto:sdja.beta@protonmail.com">sdja.beta@protonmail.com</a></p>
       </form>
     </section>
 

@@ -16,6 +16,8 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
@@ -41,6 +43,7 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(min_length=2, max_length=60)
     invite_code: str = ""
+    privacy_consent: bool = False
 
 
 class LoginIn(BaseModel):
@@ -168,6 +171,11 @@ def log_activity(db, type_: str, text: str) -> dict:
 
 @app.post("/api/register")
 def register(body: RegisterIn):
+    if not body.privacy_consent:
+        raise HTTPException(
+            status_code=422,
+            detail="Tu dois accepter la politique de confidentialité",
+        )
     email = body.email.lower()
     # le bon code (optionnel) fait de toi un modérateur ; sinon il faut
     # un email étudiant de l'école
@@ -187,9 +195,9 @@ def register(body: RegisterIn):
         try:
             cur = db.execute(
                 "INSERT INTO users (email, password_hash, salt, name, is_admin, approved) "
-                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                "VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
                 # les admins sont validés d'office ; les élèves attendent
-                (email, pw_hash, salt, name, is_admin, is_admin),
+                (email, pw_hash, salt, name, is_admin, is_admin, "2026-09-08"),
             )
         except UniqueViolation:
             raise HTTPException(status_code=409, detail="Cet email est déjà inscrit")
@@ -240,6 +248,7 @@ def app_config():
     return {
         "app_name": config.APP_NAME,
         "email_domains": sorted(config.EMAIL_DOMAINS),
+        "support_email": config.SUPPORT_EMAIL,
     }
 
 
@@ -452,6 +461,56 @@ def delete_account(body: DeleteAccountIn, user_id: int = auth.CurrentUser):
     if kyi_row and kyi_row["card_photo"]:
         (config.KYI_DIR / kyi_row["card_photo"]).unlink(missing_ok=True)
     return {"ok": True}
+
+
+@app.get("/api/account/export")
+def export_account(user_id: int = auth.CurrentUser):
+    """Exporte les données personnelles sans jamais inclure le mot de passe."""
+    with get_db() as db:
+        user = db.execute(
+            "SELECT id, email, name, is_admin, banned, approved, created_at, "
+            "privacy_consent_at, privacy_version FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+        profile = db.execute(
+            "SELECT bio, classe, interests, intent, gender, seeking, photo, "
+            "instagram, snapchat, whatsapp, age, invisible FROM profiles "
+            "WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()
+        photos = [
+            dict(row) for row in db.execute(
+                "SELECT id, filename, position FROM photos WHERE user_id = %s "
+                "ORDER BY position, id", (user_id,)
+            ).fetchall()
+        ]
+        swipes = [
+            dict(row) for row in db.execute(
+                "SELECT target_id, liked, created_at FROM swipes "
+                "WHERE swiper_id = %s ORDER BY created_at", (user_id,)
+            ).fetchall()
+        ]
+        reports = [
+            dict(row) for row in db.execute(
+                "SELECT id, reported_id, match_id, reason, status, created_at "
+                "FROM reports WHERE reporter_id = %s ORDER BY created_at", (user_id,)
+            ).fetchall()
+        ]
+    payload = {
+        "exported_at": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ).isoformat(),
+        "support_email": config.SUPPORT_EMAIL,
+        "user": dict(user) if user else None,
+        "profile": dict(profile) if profile else None,
+        "photos": photos,
+        "swipes": swipes,
+        "reports": reports,
+    }
+    return JSONResponse(
+        content=jsonable_encoder(payload),
+        headers={"Content-Disposition": "attachment; filename=sjda-donnees.json"},
+    )
 
 
 # ---------------------------------------------------------------- découverte
@@ -1052,3 +1111,8 @@ def service_worker():
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy():
+    return FileResponse(FRONTEND_DIR / "privacy.html")
