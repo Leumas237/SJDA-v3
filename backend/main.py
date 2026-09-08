@@ -194,7 +194,8 @@ def register(body: RegisterIn):
     with get_db() as db:
         try:
             cur = db.execute(
-                "INSERT INTO users (email, password_hash, salt, name, is_admin, approved) "
+                "INSERT INTO users (email, password_hash, salt, name, is_admin, approved, "
+                "privacy_consent_at, privacy_version) "
                 "VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
                 # les admins sont validés d'office ; les élèves attendent
                 (email, pw_hash, salt, name, is_admin, is_admin, "2026-09-08"),
