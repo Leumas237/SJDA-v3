@@ -10,6 +10,7 @@ KYI_DIR = DATA_DIR / "kyi"
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SJDA_DATABASE_URL", "")
 
 APP_NAME = os.environ.get("SJDA_APP_NAME", "SJDA")
+SUPPORT_EMAIL = os.environ.get("SJDA_SUPPORT_EMAIL", "sdja.beta@protonmail.com")
 
 # Vérification école : l'inscription exige un email étudiant de l'un de
 # ces domaines (SJDA_EMAIL_DOMAINS, séparés par des virgules).
