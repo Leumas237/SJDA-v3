@@ -29,7 +29,7 @@ def create_session(user_id: int) -> str:
     token = secrets.token_urlsafe(32)
     with get_db() as db:
         db.execute(
-            "INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id)
+            "INSERT INTO sessions (token, user_id) VALUES (%s, %s)", (token, user_id)
         )
     return token
 
@@ -39,12 +39,12 @@ def user_id_from_token(token: str) -> int | None:
         return None
     with get_db() as db:
         row = db.execute(
-            "SELECT user_id FROM sessions WHERE token = ?", (token,)
+            "SELECT user_id FROM sessions WHERE token = %s", (token,)
         ).fetchone()
         if row:
             # trace d'activité pour le badge « actif récemment »
             db.execute(
-                "UPDATE users SET last_seen = datetime('now') WHERE id = ?",
+                "UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = %s",
                 (row["user_id"],),
             )
     return row["user_id"] if row else None
@@ -65,7 +65,7 @@ def current_approved_id(request: Request) -> int:
     user_id = current_user_id(request)
     with get_db() as db:
         row = db.execute(
-            "SELECT approved, banned FROM users WHERE id = ?", (user_id,)
+            "SELECT approved, banned FROM users WHERE id = %s", (user_id,)
         ).fetchone()
     if not row or row["banned"]:
         raise HTTPException(status_code=403, detail="Ce compte a été suspendu")
@@ -80,7 +80,7 @@ def current_admin_id(request: Request) -> int:
     user_id = current_user_id(request)
     with get_db() as db:
         row = db.execute(
-            "SELECT is_admin FROM users WHERE id = ?", (user_id,)
+            "SELECT is_admin FROM users WHERE id = %s", (user_id,)
         ).fetchone()
     if not row or not row["is_admin"]:
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs")

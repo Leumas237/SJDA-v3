@@ -53,8 +53,11 @@ sortir de leur bulle : se faire des amis, ou peut-être plus, si affinités !
 
 ```bash
 pip install -r requirements.txt
+export DATABASE_URL=postgresql://user:password@localhost:5432/sjda
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
+
+Sous PowerShell : `$env:DATABASE_URL = "postgresql://user:password@localhost:5432/sjda"`.
 
 Puis ouvre http://localhost:8000 — sur téléphone, utilise l'IP de ton PC
 (ex. `http://192.168.1.10:8000`) en étant sur le même Wi-Fi.
@@ -71,12 +74,13 @@ Démarrage sans Docker : `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 1. Connecte ce repo GitHub, choisis « Web Service » (Render détecte le Dockerfile)
 2. Configure les variables d'environnement : `SJDA_ADMIN_EMAILS` (ton email)
    et éventuellement `SJDA_MOD_CODE` (code modérateur secret)
-3. ⚠️ **Important — persistance** : la base SQLite et les photos vivent dans
+3. Configure `DATABASE_URL` avec l'URL de ta base PostgreSQL managée.
+4. ⚠️ **Important — persistance** : les photos, cartes KYI et clés VAPID vivent dans
    `./data`. Sur les offres gratuites, le disque est effacé à chaque
    redéploiement. Ajoute un **disque persistant** (Render : "Disk", Railway :
    "Volume", Fly : "Volume") monté sur `/app/data`, ou définis `SJDA_DATA_DIR`
    vers le point de montage.
-4. Ouvre l'URL en HTTPS sur ton téléphone → « Ajouter à l'écran d'accueil »
+5. Ouvre l'URL en HTTPS sur ton téléphone → « Ajouter à l'écran d'accueil »
    pour l'installer comme une vraie app.
 
 ## Configuration (variables d'environnement)
@@ -89,7 +93,8 @@ Démarrage sans Docker : `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 | `SJDA_DAILY_LIKES` | `15` | Quota de likes par jour et par personne |
 | `SJDA_SPAM_STRIKES_BAN` | `30` | Tentatives au-delà du quota avant suspension automatique |
 | `SJDA_APP_NAME` | `SJDA` | Nom affiché de l'app |
-| `SJDA_DATA_DIR` | `./data` | Dossier de la base SQLite, des photos et des clés VAPID |
+| `DATABASE_URL` | *(requis)* | URL de connexion PostgreSQL |
+| `SJDA_DATA_DIR` | `./data` | Dossier des photos, cartes KYI et clés VAPID |
 
 L'inscription exige un email étudiant d'un des domaines — sauf pour les
 emails de `SJDA_ADMIN_EMAILS` et pour qui fournit le bon `SJDA_MOD_CODE`.
@@ -99,10 +104,10 @@ Les admins peuvent aussi promouvoir/rétrograder un modo depuis la liste des
 ## Architecture
 
 ```
-backend/          API FastAPI + SQLite (aucune config serveur nécessaire)
+backend/          API FastAPI + PostgreSQL
   main.py         Routes : auth, profils, découverte, swipe, matchs, chat, WebSocket
   auth.py         Mots de passe PBKDF2 + sessions par jeton
-  db.py           Schéma SQLite
+  db.py           Schéma PostgreSQL
   config.py       Configuration
 frontend/         PWA en HTML/CSS/JS vanilla (aucun build nécessaire)
   index.html      Toutes les vues (auth, swipe, matchs, chat, profil)

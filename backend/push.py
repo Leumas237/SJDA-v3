@@ -46,7 +46,7 @@ def push_to_users(user_ids, title: str, body: str, url: str = "/") -> None:
     if not user_ids:
         return
     with get_db() as db:
-        marks = ",".join("?" * len(user_ids))
+        marks = ",".join("%s" for _ in user_ids)
         subs = [
             dict(r)
             for r in db.execute(
@@ -79,4 +79,4 @@ def _send_all(subs, payload: str) -> None:
     if dead:
         with get_db() as db:
             for endpoint in dead:
-                db.execute("DELETE FROM push_subs WHERE endpoint = ?", (endpoint,))
+                db.execute("DELETE FROM push_subs WHERE endpoint = %s", (endpoint,))

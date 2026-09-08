@@ -46,8 +46,8 @@ backend/
   auth.py      ← mots de passe (PBKDF2), sessions par jeton, et les
                  3 niveaux d'accès : CurrentUser / CurrentApproved /
                  CurrentAdmin (dépendances FastAPI)
-  db.py        ← schéma SQLite (SCHEMA) + migrations additives
-                 (MIGRATIONS) + get_db(), le context manager de connexion
+  db.py        ← schéma PostgreSQL (SCHEMA) + get_db(), le context
+                 manager de connexion
   config.py    ← toute la configuration, lue depuis les variables
                  d'environnement avec des valeurs par défaut
   push.py      ← notifications Web Push (VAPID) ; génère et stocke les
@@ -151,11 +151,10 @@ Schéma dans backend/db.py. Les tables :
   push_subs  abonnements Web Push par appareil (endpoint = clé primaire)
   activity   journal d'événements pour le fil admin (type + texte)
 
-MIGRATIONS : la liste MIGRATIONS dans db.py contient des ALTER TABLE
-exécutés à chaque démarrage dans un try/except (l'échec « duplicate
-column » est normal sur une base à jour). POUR AJOUTER UNE COLONNE :
-ajoute-la dans le CREATE TABLE (pour les nouvelles installations) ET
-dans MIGRATIONS (pour les bases existantes). N'en retire jamais une.
+SCHÉMA : les tables PostgreSQL sont créées au démarrage avec
+CREATE TABLE IF NOT EXISTS. Pour ajouter une colonne à une base existante,
+ajoute une migration PostgreSQL explicite et conserve la compatibilité avec
+les installations déjà déployées.
 
 ⚠ PIÈGE IMPORTANT — get_db() : le context manager committe à la sortie
 SEULEMENT si aucune exception n'est levée. Si tu écris en base PUIS
