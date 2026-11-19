@@ -1,5 +1,5 @@
-/* Service worker SJDA : cache de la coquille de l'app (network-first) */
-const CACHE = "sjda-v4";
+/* Service worker BC Connect : cache de la coquille de l'app (network-first) */
+const CACHE = "bc-connect-v1";
 const SHELL = [
   "/",
   "/static/style.css",
@@ -27,7 +27,7 @@ self.addEventListener("push", (e) => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch { /* payload non-JSON */ }
   e.waitUntil(
-    self.registration.showNotification(data.title || "SJDA", {
+    self.registration.showNotification(data.title || "BC Connect", {
       body: data.body || "",
       icon: "/static/icons/icon-192.png",
       badge: "/static/icons/icon-192.png",

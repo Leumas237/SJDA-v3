@@ -3,20 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#107EC2">
-  <title>SJDA — Rencontres à l'école</title>
+  <meta name="theme-color" content="#007A3D">
+  <title>BC Connect — Rencontres IUT-FV Bandjoun</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/static/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
     <!-- ================= AUTH ================= -->
     <section id="view-auth" class="view">
       <div class="auth-card">
-        <h1 class="logo">🔥 SJDA</h1>
-        <p class="tagline">Rencontre les élèves de ton école.<br>Amitié ou plus, si affinités&nbsp;!</p>
+        <h1 class="logo">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="40" height="40" rx="12" fill="url(#grad)"/>
+            <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="Poppins, system-ui, sans-serif" font-weight="700" font-size="20" fill="white">BC</text>
+            <defs>
+              <linearGradient id="grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#007A3D"/>
+                <stop offset="100%" stop-color="#004D2A"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </h1>
+        <p class="tagline">Connecte les étudiants de l'IUT-FV Bandjoun.<br>Amitié ou amour, si affinités&nbsp;!</p>
 
         <div class="tabs">
           <button id="tab-login" class="tab active">Connexion</button>
@@ -24,21 +38,21 @@
         </div>
 
         <form id="form-login" class="auth-form">
-          <input type="email" id="login-email" placeholder="Email" required autocomplete="email">
+          <input type="email" id="login-email" placeholder="Adresse e-mail" required autocomplete="email">
           <input type="password" id="login-password" placeholder="Mot de passe" required autocomplete="current-password">
           <button type="submit" class="btn-primary">Se connecter</button>
         </form>
 
         <form id="form-register" class="auth-form hidden">
           <input type="text" id="reg-name" placeholder="Prénom" required minlength="2" autocomplete="given-name">
-          <input type="email" id="reg-email" placeholder="Email étudiant" required autocomplete="email">
+          <input type="email" id="reg-email" placeholder="Adresse e-mail" required autocomplete="email">
           <p id="reg-hint" class="muted reg-hint"></p>
           <input type="password" id="reg-password" placeholder="Mot de passe (8 caractères min.)" required minlength="8" autocomplete="new-password">
-          <input type="text" id="reg-invite" placeholder="Code d'invitation (optionnel)">
+          <input type="text" id="reg-invite" placeholder="Code modérateur (optionnel)">
           <label class="consent-line">
             <input type="checkbox" id="reg-consent" required>
             <span>J'accepte la <a href="/privacy" target="_blank" rel="noopener">politique de confidentialité</a>
-            et le traitement de mes données pour faire fonctionner SJDA.</span>
+            et le traitement de mes données pour faire fonctionner BC Connect.</span>
           </label>
           <button type="submit" class="btn-primary">Créer mon compte</button>
         </form>
@@ -50,7 +64,7 @@
     <!-- ================= SWIPE ================= -->
     <section id="view-discover" class="view hidden">
       <header class="topbar brand-bar">
-        <h1 class="brand">🔥 SJDA</h1>
+        <h1 class="brand">BC Connect</h1>
         <div class="topbar-actions">
           <button id="btn-push" class="icon-btn hidden" title="Activer les notifications">🔔</button>
           <button id="btn-filters" class="icon-btn" title="Filtres">⚙️</button>
@@ -60,7 +74,7 @@
       <div id="deck" class="deck"></div>
       <div id="deck-empty" class="empty hidden">
         <p>😌 Plus personne à découvrir pour l'instant.</p>
-        <p class="muted">Reviens plus tard, élargis tes filtres, ou invite tes camarades&nbsp;!</p>
+        <p class="muted">Reviens plus tard, élargis tes filtres, ou invite tes camarades de l'IUT-FV&nbsp;!</p>
       </div>
       <div id="deck-invisible" class="empty hidden">
         <p>🕶️ Mode invisible activé.</p>
@@ -76,7 +90,7 @@
 
     <!-- ================= MATCHS ================= -->
     <section id="view-matches" class="view hidden">
-      <header class="topbar brand-bar"><h1 class="brand">🔥 SJDA</h1></header>
+      <header class="topbar brand-bar"><h1 class="brand">BC Connect</h1></header>
       <div id="new-matches-wrap" class="new-matches-wrap hidden">
         <h3 class="section-label">Nouveaux matchs</h3>
         <div id="new-matches" class="new-matches"></div>
@@ -94,17 +108,17 @@
       <div class="waiting-card kyi-card">
         <div class="waiting-emoji">🪪</div>
         <h2>Vérification d'identité</h2>
-        <p class="muted">Pour garder SJDA 100&nbsp;% élèves de l'école, complète
+        <p class="muted">Pour garantir une communauté 100&nbsp;% étudiants de l'IUT-FV, complète
         ton dossier. Ces informations ne sont visibles que par l'équipe de
-        modération — jamais par les autres élèves.</p>
+        modération — jamais par les autres étudiants.</p>
         <form id="form-kyi" class="auth-form">
           <input type="text" id="k-fullname" placeholder="Nom et prénom officiels" required minlength="3" maxlength="120">
           <label class="filter-label">Date de naissance
             <input type="date" id="k-birthdate" required>
           </label>
-          <input type="text" id="k-classe" placeholder="Classe / filière (ex. MPSI)" required maxlength="40">
+          <input type="text" id="k-classe" placeholder="Filière / Classe (ex. GMP, GEII, TC, GEA...)" required maxlength="40">
           <label class="card-picker" id="card-picker">
-            <span id="card-picker-text">📷 Photo de ta carte d'étudiant</span>
+            <span id="card-picker-text">📷 Photo de ta carte étudiante IUT-FV</span>
             <img id="card-preview" class="hidden" alt="">
             <input type="file" id="k-card" accept="image/jpeg,image/png,image/webp" hidden>
           </label>
@@ -120,7 +134,7 @@
       <div class="waiting-card">
         <div class="waiting-emoji">⏳</div>
         <h2>Demande envoyée !</h2>
-        <p>Ton inscription doit être validée par l'équipe de l'école.<br>
+        <p>Ton inscription doit être validée par l'équipe de l'IUT-FV.<br>
         Tu recevras l'accès dès qu'elle est acceptée — cette page se
         mettra à jour toute seule.</p>
         <p class="muted">En attendant, prépare ton profil pour être prêt·e à matcher 😉</p>
@@ -166,10 +180,11 @@
         </fieldset>
         <label>Je cherche
           <select id="p-intent">
-            <option value="amis">Des amis 🤝</option>
-            <option value="couple">Une relation 💘</option>
-            <option value="les_deux" selected>Les deux, on verra 😄</option>
+            <option value="amis">Amitié 🤝</option>
+            <option value="couple">Relation amoureuse 💘</option>
+            <option value="les_deux" selected>Les deux 😄</option>
           </select>
+          <span class="muted" id="intent-hint" style="display:none; font-size: 0.8rem;">La relation amoureuse est réservée aux 18 ans et plus.</span>
         </label>
         <label>Je suis
           <select id="p-gender">
@@ -196,17 +211,17 @@
         <button type="button" id="btn-logout" class="btn-ghost">Se déconnecter</button>
         <button type="button" id="btn-delete-account" class="btn-ghost danger-text">Supprimer mon compte</button>
         <button type="button" id="btn-export-account" class="btn-ghost">Télécharger mes données</button>
-        <p class="muted support-line">Support : <a href="mailto:sdja.beta@protonmail.com">sdja.beta@protonmail.com</a></p>
+        <p class="muted support-line">Support : <a href="mailto:support@bc-connect.app">support@bc-connect.app</a></p>
       </form>
     </section>
 
     <!-- ================= ADMIN ================= -->
     <section id="view-admin" class="view hidden">
-      <header class="topbar"><h2>🛡️ Modération</h2></header>
+      <header class="topbar"><h2>🛡️ Administration BC Connect</h2></header>
       <div class="admin-body">
         <div id="admin-stats" class="stats-grid"></div>
 
-        <h3 class="admin-h3">Demandes d'inscription</h3>
+        <h3 class="admin-h3">Demandes d'inscription (KYI)</h3>
         <div id="admin-pending"></div>
 
         <h3 class="admin-h3">Signalements</h3>
@@ -215,7 +230,7 @@
         <h3 class="admin-h3">Activité en direct</h3>
         <ul id="admin-feed" class="admin-feed"></ul>
 
-        <h3 class="admin-h3">Élèves inscrits</h3>
+        <h3 class="admin-h3">Étudiants validés</h3>
         <div id="admin-users"></div>
       </div>
     </section>
@@ -223,27 +238,28 @@
     <!-- ================= NAV ================= -->
     <nav id="navbar" class="navbar hidden">
       <button data-view="waiting" class="nav-btn hidden" id="nav-waiting">⏳<span>Attente</span></button>
-      <button data-view="discover" class="nav-btn active" id="nav-discover">🔥<span>Découvrir</span></button>
-      <button data-view="matches" class="nav-btn" id="nav-matches">💞<span>Matchs</span></button>
+      <button data-view="discover" class="nav-btn active" id="nav-discover">🌿<span>Découvrir</span></button>
+      <button data-view="matches" class="nav-btn" id="nav-matches">💚<span>Matchs</span></button>
       <button data-view="profile" class="nav-btn">👤<span>Profil</span></button>
-      <button data-view="admin" class="nav-btn hidden" id="nav-admin">🛡️<span>Modération</span></button>
+      <button data-view="admin" class="nav-btn hidden" id="nav-admin">🛡️<span>Admin</span></button>
     </nav>
 
     <!-- ================= MATCH POPUP ================= -->
-    <div id="match-popup" class="match-popup match-screen hidden">
+    <div id="match-popup" class="match-popup hidden">
       <div class="match-screen-inner">
         <h2 class="match-title">C'est un Match&nbsp;!</h2>
+        <div class="match-heart">💚</div>
         <div id="match-avatars" class="match-avatars"></div>
-        <p id="match-popup-text"></p>
+        <p id="match-popup-text" class="match-subtitle"></p>
         <button id="btn-match-socials" class="btn-light">Voir ses réseaux 🔓</button>
         <button id="btn-match-close" class="btn-ghost-light">Continuer à swiper</button>
       </div>
     </div>
 
-    <!-- ================= CARTE D'ÉTUDIANT (vue modo) ================= -->
+    <!-- ================= CARTE ÉTUDIANTE (vue admin) ================= -->
     <div id="card-popup" class="match-popup hidden">
       <div class="match-popup-inner">
-        <h2 id="card-popup-title">Carte d'étudiant</h2>
+        <h2 id="card-popup-title">Carte étudiante IUT-FV</h2>
         <img id="card-popup-img" class="card-full" alt="">
         <button id="btn-card-close" class="btn-ghost">Fermer</button>
       </div>

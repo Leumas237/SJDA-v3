@@ -1,4 +1,4 @@
-"""SJDA — application de rencontre/amitié pour l'école.
+"""BC Connect — plateforme de rencontres pour l'IUT-FV Bandjoun.
 
 Lancement : uvicorn backend.main:app --host 0.0.0.0 --port 8000
 """
@@ -141,10 +141,6 @@ def mod_code_ok(invite_code: str) -> bool:
     )
 
 
-def student_email_ok(email: str) -> bool:
-    return any(email.endswith("@" + d) for d in config.EMAIL_DOMAINS)
-
-
 def get_match_or_404(db, match_id: int, user_id: int):
     match = db.execute(
         "SELECT * FROM matches WHERE id = %s AND closed = 0 AND (user_a = %s OR user_b = %s)",
@@ -177,19 +173,14 @@ def register(body: RegisterIn):
             detail="Tu dois accepter la politique de confidentialité",
         )
     email = body.email.lower()
-    # le bon code (optionnel) fait de toi un modérateur ; sinon il faut
-    # un email étudiant de l'école
+    # le bon code (optionnel) fait de toi un modérateur
+    # les emails dans BC_ADMIN_EMAILS deviennent admins automatiquement
+    # sinon inscription libre (tout email accepté), validation via KYI obligatoire
     code_ok = mod_code_ok(body.invite_code)
     admin_listed = email in config.ADMIN_EMAILS
-    if not (student_email_ok(email) or code_ok or admin_listed):
-        domains = ", ".join("@" + d for d in sorted(config.EMAIL_DOMAINS))
-        raise HTTPException(
-            status_code=403,
-            detail=f"Inscris-toi avec ton email étudiant ({domains})",
-        )
+    is_admin = int(admin_listed or code_ok)
     salt = auth.new_salt()
     pw_hash = auth.hash_password(body.password, salt)
-    is_admin = int(admin_listed or code_ok)
     name = body.name.strip()
     with get_db() as db:
         try:
@@ -197,8 +188,8 @@ def register(body: RegisterIn):
                 "INSERT INTO users (email, password_hash, salt, name, is_admin, approved, "
                 "privacy_consent_at, privacy_version) "
                 "VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s) RETURNING id",
-                # les admins sont validés d'office ; les élèves attendent
-                (email, pw_hash, salt, name, is_admin, is_admin, "2026-09-08"),
+                # les admins sont validés d'office ; les autres attendent validation KYI
+                (email, pw_hash, salt, name, is_admin, is_admin, "2026-11-19"),
             )
         except UniqueViolation:
             raise HTTPException(status_code=409, detail="Cet email est déjà inscrit")
@@ -234,7 +225,7 @@ def login(body: LoginIn):
             raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
         if user["banned"]:
             raise HTTPException(status_code=403, detail="Ce compte a été suspendu")
-        # promotion automatique si l'email est ajouté à SJDA_ADMIN_EMAILS
+        # promotion automatique si l'email est ajouté à BC_ADMIN_EMAILS
         # (jamais de rétrogradation ici : les modos par code le restent)
         if not user["is_admin"] and email in config.ADMIN_EMAILS:
             db.execute(
@@ -248,7 +239,7 @@ def login(body: LoginIn):
 def app_config():
     return {
         "app_name": config.APP_NAME,
-        "email_domains": sorted(config.EMAIL_DOMAINS),
+        "email_domains": [],  # inscription libre, plus de restriction de domaine
         "support_email": config.SUPPORT_EMAIL,
     }
 
@@ -358,6 +349,12 @@ def update_profile(body: ProfileIn, user_id: int = auth.CurrentUser):
         raise HTTPException(status_code=422, detail="Préférence invalide")
     if body.age and not (15 <= body.age <= 30):
         raise HTTPException(status_code=422, detail="Âge entre 15 et 30 ans")
+    # Protection mineurs : intention "couple" réservée aux 18 ans et plus
+    if body.intent == "couple" and body.age and body.age < 18:
+        raise HTTPException(
+            status_code=422,
+            detail="La recherche de relation amoureuse est réservée aux personnes majeures (18 ans et plus)"
+        )
     interests = [t.strip()[:30] for t in body.interests if t.strip()][:12]
     instagram = body.instagram.strip().lstrip("@")
     snapchat = body.snapchat.strip().lstrip("@")
@@ -510,7 +507,7 @@ def export_account(user_id: int = auth.CurrentUser):
     }
     return JSONResponse(
         content=jsonable_encoder(payload),
-        headers={"Content-Disposition": "attachment; filename=sjda-donnees.json"},
+        headers={"Content-Disposition": "attachment; filename=bc-connect-donnees.json"},
     )
 
 
@@ -832,6 +829,9 @@ def admin_overview(admin_id: int = auth.CurrentAdmin):
         stats = {
             "users": db.execute(
                 "SELECT COUNT(*) c FROM users WHERE approved = 1"
+            ).fetchone()["c"],
+            "active_users": db.execute(
+                "SELECT COUNT(*) c FROM users WHERE approved = 1 AND last_seen >= CURRENT_TIMESTAMP - INTERVAL '7 days'"
             ).fetchone()["c"],
             "pending_signups": db.execute(
                 "SELECT COUNT(*) c FROM users WHERE approved = 0 AND banned = 0"

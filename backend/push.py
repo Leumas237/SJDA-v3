@@ -26,7 +26,7 @@ def _load_vapid() -> Vapid:
 
 
 _vapid = _load_vapid()
-_CLAIM_SUB = "mailto:" + next(iter(config.ADMIN_EMAILS), "admin@sjda.local")
+_CLAIM_SUB = "mailto:" + next(iter(config.ADMIN_EMAILS), "admin@bc-connect.app")
 
 
 def public_key_b64() -> str:

@@ -1,11 +1,11 @@
-/* SJDA — logique front (SPA vanilla) */
+/* BC Connect — logique front (SPA vanilla) */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  token: localStorage.getItem("sjda_token") || "",
-  userId: Number(localStorage.getItem("sjda_user_id")) || null,
+  token: localStorage.getItem("bc_token") || "",
+  userId: Number(localStorage.getItem("bc_user_id")) || null,
   me: null,
   deck: [],             // profils à swiper
   currentDetail: null,  // { matchId, profile } fiche match ouverte
@@ -101,8 +101,8 @@ $("form-register").addEventListener("submit", async (e) => {
 async function onLoggedIn(data, isNew = false) {
   state.token = data.token;
   state.userId = data.user_id;
-  localStorage.setItem("sjda_token", data.token);
-  localStorage.setItem("sjda_user_id", data.user_id);
+  localStorage.setItem("bc_token", data.token);
+  localStorage.setItem("bc_user_id", data.user_id);
   state.me = await api("/me");
   applyAccessUi();
   connectWs();
@@ -116,8 +116,8 @@ async function onLoggedIn(data, isNew = false) {
 }
 
 function logout() {
-  localStorage.removeItem("sjda_token");
-  localStorage.removeItem("sjda_user_id");
+  localStorage.removeItem("bc_token");
+  localStorage.removeItem("bc_user_id");
   state.token = ""; state.userId = null; state.me = null;
   if (state.ws) { state.ws.close(); state.ws = null; }
   stopApprovalPolling();
@@ -151,7 +151,7 @@ $("btn-export-account").onclick = async () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "sjda-donnees.json";
+    link.download = "bc-connect-donnees.json";
     link.click();
     URL.revokeObjectURL(url);
   } catch (err) { alert(err.message); }
@@ -176,7 +176,7 @@ $("form-kyi").addEventListener("submit", async (e) => {
   const errEl = $("kyi-error");
   errEl.classList.add("hidden");
   if (!file) {
-    errEl.textContent = "Ajoute une photo de ta carte d'étudiant";
+    errEl.textContent = "Ajoute une photo de ta carte étudiante IUT-FV";
     errEl.classList.remove("hidden");
     return;
   }
@@ -242,6 +242,7 @@ function fillProfileForm() {
   $("p-whatsapp").value = p.whatsapp || "";
   $("p-invisible").checked = !!p.invisible;
   renderPhotosGrid();
+  updateIntentHint();
 }
 
 function renderPhotosGrid() {
@@ -270,13 +271,40 @@ function renderPhotosGrid() {
   }
 }
 
+function updateIntentHint() {
+  const intent = $("p-intent").value;
+  const age = Number($("p-age").value) || 0;
+  const hint = $("intent-hint");
+  if (intent === "couple") {
+    hint.style.display = "block";
+    if (age && age < 18) {
+      hint.textContent = "⚠️ La relation amoureuse est réservée aux 18 ans et plus.";
+      hint.style.color = "var(--pass)";
+    } else {
+      hint.textContent = "La relation amoureuse est réservée aux 18 ans et plus.";
+      hint.style.color = "var(--muted)";
+    }
+  } else {
+    hint.style.display = "none";
+  }
+}
+
+$("p-intent").addEventListener("change", updateIntentHint);
+$("p-age").addEventListener("input", updateIntentHint);
+
 $("form-profile").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const intent = $("p-intent").value;
+  const age = Number($("p-age").value) || 0;
+  if (intent === "couple" && age && age < 18) {
+    alert("La recherche de relation amoureuse est réservée aux personnes majeures (18 ans et plus).");
+    return;
+  }
   await api("/profile", {
     method: "PUT",
     json: {
       bio: $("p-bio").value,
-      age: Number($("p-age").value) || 0,
+      age: age,
       classe: $("p-classe").value,
       interests: $("p-interests").value.split(",").map((s) => s.trim()).filter(Boolean),
       intent: $("p-intent").value,
@@ -291,6 +319,7 @@ $("form-profile").addEventListener("submit", async (e) => {
   state.me = await api("/me");
   $("profile-saved").classList.remove("hidden");
   setTimeout(() => $("profile-saved").classList.add("hidden"), 2000);
+  updateIntentHint();
 });
 
 $("photo-input").addEventListener("change", async () => {
@@ -308,12 +337,12 @@ $("photo-input").addEventListener("change", async () => {
 
 /* ---------------- swipe ---------------- */
 
-const INTENT_LABEL = { amis: "🤝 Cherche des amis", couple: "💘 Cherche l'amour", les_deux: "😄 Ouvert·e à tout" };
+const INTENT_LABEL = { amis: "🤝 Amitié", couple: "💘 Amoureux", les_deux: "😄 Les deux" };
 
 /* ---------------- filtres de découverte ---------------- */
 
 function getFilters() {
-  try { return JSON.parse(localStorage.getItem("sjda_filters")) || {}; }
+  try { return JSON.parse(localStorage.getItem("bc_filters")) || {}; }
   catch { return {}; }
 }
 
@@ -336,7 +365,7 @@ $("btn-filters").onclick = () => {
 };
 
 $("btn-filters-apply").onclick = () => {
-  localStorage.setItem("sjda_filters", JSON.stringify({
+  localStorage.setItem("bc_filters", JSON.stringify({
     age_min: Number($("f-age-min").value) || 0,
     age_max: Number($("f-age-max").value) || 0,
     classe: $("f-classe").value.trim(),
@@ -346,7 +375,7 @@ $("btn-filters-apply").onclick = () => {
 };
 
 $("btn-filters-reset").onclick = () => {
-  localStorage.removeItem("sjda_filters");
+  localStorage.removeItem("bc_filters");
   $("filter-popup").classList.add("hidden");
   loadDeck();
 };
@@ -447,6 +476,7 @@ function attachDrag() {
     startX = (e.touches ? e.touches[0] : e).clientX;
     startY = (e.touches ? e.touches[0] : e).clientY;
     card.style.transition = "none";
+    card.classList.add("dragging");
   };
   const onMove = (e) => {
     if (!dragging) return;
@@ -461,6 +491,7 @@ function attachDrag() {
   const onUp = (e) => {
     if (!dragging) return;
     dragging = false;
+    card.classList.remove("dragging");
     if (dx > 100) swipeTop(true);
     else if (dx < -100) swipeTop(false);
     else {
@@ -533,6 +564,8 @@ function showMatchPopup(profile, matchId) {
   $("match-avatars").innerHTML =
     avatarHtml(state.me || {}, "avatar") + avatarHtml(profile, "avatar");
   $("match-popup").classList.remove("hidden");
+  // Force reflow pour relancer l'animation
+  void $("match-popup").offsetWidth;
   $("btn-match-socials").onclick = async () => {
     $("match-popup").classList.add("hidden");
     // recharge le match : les réseaux ne sont exposés qu'après le match
@@ -666,8 +699,9 @@ async function loadAdmin() {
 
 function renderAdminStats(s) {
   $("admin-stats").innerHTML = `
-    <div class="stat"><b>${s.users}</b><span>élèves</span></div>
-    <div class="stat ${s.pending_signups ? "alert" : ""}"><b>${s.pending_signups}</b><span>demandes</span></div>
+    <div class="stat"><b>${s.users}</b><span>étudiants validés</span></div>
+    <div class="stat"><b>${s.active_users || 0}</b><span>actifs (7j)</span></div>
+    <div class="stat ${s.pending_signups ? "alert" : ""}"><b>${s.pending_signups}</b><span>demandes KYI</span></div>
     <div class="stat"><b>${s.matches}</b><span>matchs</span></div>
     <div class="stat ${s.pending_reports ? "alert" : ""}"><b>${s.pending_reports}</b><span>signalements</span></div>
     <div class="stat"><b>${s.banned}</b><span>bannis</span></div>`;
@@ -887,14 +921,9 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
-// rappel des emails étudiants acceptés sous le champ d'inscription
-api("/config").then((c) => {
-  const domains = c.email_domains || [];
-  if (domains.length) {
-    $("reg-hint").textContent =
-      "Utilise ton email étudiant : " + domains.map((d) => "@" + d).join(", ");
-  }
-}).catch(() => {});
+// inscription libre : plus de restriction de domaine email
+// le hint affiche simplement qu'un email valide suffit
+$("reg-hint").textContent = "Inscription libre — utilise ton adresse e-mail habituelle";
 
 (async function init() {
   if (state.token) {

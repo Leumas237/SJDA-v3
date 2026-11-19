@@ -1,13 +1,13 @@
 ════════════════════════════════════════════════════════════════════════
-  DEVKIT — SJDA (Saint Jean Dating App)
+  DEVKIT — BC Connect
   Lettre au développeur : tout ce qu'il faut savoir pour reprendre,
   modifier et mettre en ligne cette application.
 ════════════════════════════════════════════════════════════════════════
 
 Salut !
 
-Tu tiens entre les mains une PWA de rencontre réservée aux élèves de
-l'Institut Saint Jean. Ce document t'explique TOUT : comment le code
+Tu tiens entre les mains une PWA de rencontre réservée aux étudiants de
+l'IUT-FV Bandjoun. Ce document t'explique TOUT : comment le code
 fonctionne, comment le déployer, et comment changer n'importe quoi —
 du logo au nom de l'app en passant par les couleurs et les règles du jeu.
 Prends 20 minutes pour le lire en entier avant de toucher au code : il
@@ -27,11 +27,11 @@ t'évitera tous les pièges connus.
   obligatoire, pas de CORS à gérer (même origine).
 
 • UNE SEULE dépendance d'état : le dossier data/. Il contient la base
-  SQLite, les photos de profil, les cartes d'étudiant du KYI et les
-  clés de notification push. Sauvegarde ce dossier = sauvegarde tout.
+  PostgreSQL (en prod), les photos de profil, les cartes d'étudiant du KYI et
+  les clés de notification push. Sauvegarde ce dossier = sauvegarde tout.
 
-• Petite échelle assumée : SQLite et un process unique suffisent
-  largement pour une école (des centaines d'utilisateurs, pas des
+• Petite échelle assumée : PostgreSQL et un process unique suffisent
+  largement pour un campus (des centaines d'utilisateurs, pas des
   millions). Si un jour ça explose : PostgreSQL + stockage objet,
   mais n'optimise pas avant d'en avoir besoin.
 
@@ -62,12 +62,12 @@ frontend/
                  dans :root (voir §9 personnalisation)
   sw.js        ← service worker : cache hors-ligne + réception des push
   manifest.json← manifeste PWA (nom, couleurs, icônes)
-  icons/       ← icônes PNG 192 et 512 (voir §9 pour les régénérer)
+  icons/       ← icônes PNG 192 et 512 + logo.svg (voir §9 pour les régénérer)
 
 data/          ← créé automatiquement au premier lancement (gitignoré)
-  sjda.db          base SQLite
-  uploads/         photos de profil (servies publiquement sur /uploads)
-  kyi/             cartes d'étudiant (JAMAIS servies publiquement)
+  bc_connect.db  base PostgreSQL (en local)
+  uploads/       photos de profil (servies publiquement sur /uploads)
+  kyi/           cartes étudiantes (JAMAIS servies publiquement)
   vapid_private.pem clés de push (à sauvegarder ! si tu les perds, tous
                     les abonnements push existants deviennent invalides)
 
@@ -80,7 +80,7 @@ requirements.txt
 ──────────────────────────────────────────────────────────────────────
 
   pip install -r requirements.txt
-  SJDA_ADMIN_EMAILS=ton@email.com uvicorn backend.main:app --reload --port 8000
+  BC_ADMIN_EMAILS=ton@email.com uvicorn backend.main:app --reload --port 8000
 
 Ouvre http://localhost:8000. Inscris-toi avec ton@email.com (n'importe
 quel mot de passe ≥ 8 caractères) : tu es admin et validé d'office.
@@ -90,47 +90,51 @@ service worker peut servir du cache : ouvre les DevTools → Application →
 Service Workers → "Update on reload" pendant que tu développes).
 
 Pour tester à plusieurs : crée d'autres comptes dans des fenêtres de
-navigation privée, avec des emails des domaines autorisés.
+navigation privée, avec des emails quelconques (inscription libre).
 
 
 ──────────────────────────────────────────────────────────────────────
 4. CONFIGURATION (variables d'environnement)
 ──────────────────────────────────────────────────────────────────────
 
-  SJDA_APP_NAME          Nom de l'app côté serveur (défaut "SJDA")
-  SJDA_EMAIL_DOMAINS     Domaines email autorisés à l'inscription,
-                         séparés par des virgules. Défaut : les 7
-                         domaines Saint Jean (institutsaintjean.org,
-                         cpgesaintjean.org, universitesaintjean.org,
-                         prepavogt.org, saintjeaningenieur.org,
-                         saintjeanmanagement.org, prepasaintjean.org)
-  SJDA_MOD_CODE          Code modérateur SECRET. Vide par défaut =
-                         désactivé. Fourni dans le champ « Code
-                         d'invitation (optionnel) » à l'inscription,
-                         il rend le compte modérateur + validé d'office
-                         + dispense de l'email étudiant. À garder
-                         confidentiel absolument.
-  SJDA_ADMIN_EMAILS      Emails toujours admins (séparés par des
-                         virgules). Promus automatiquement à la
-                         connexion s'ils ne le sont pas encore.
-  SJDA_DAILY_LIKES       Quota de likes par jour (défaut 15)
-  SJDA_SPAM_STRIKES_BAN  Tentatives de like AU-DELÀ du quota avant
-                         suspension automatique pour spam (défaut 30)
-  SJDA_DATA_DIR          Emplacement du dossier data (défaut ./data)
+  BC_APP_NAME          Nom de l'app côté serveur (défaut "BC Connect")
+  BC_SUPPORT_EMAIL     Email support affiché dans l'app (défaut "support@bc-connect.app")
+  BC_EMAIL_DOMAINS     Domaines email autorisés à l'inscription,
+                       séparés par des virgules. Défaut : vide = inscription libre.
+                       Le contrôle d'appartenance IUT-FV se fait via KYI.
+  BC_MOD_CODE          Code modérateur SECRET. Vide par défaut =
+                       désactivé. Fourni dans le champ « Code
+                       modérateur (optionnel) » à l'inscription,
+                       il rend le compte modérateur + validé d'office
+                       + dispense de l'email étudiant. À garder
+                       confidentiel absolument.
+  BC_ADMIN_EMAILS      Emails toujours admins (séparés par des
+                       virgules). Promus automatiquement à la
+                       connexion s'ils ne le sont pas encore.
+  BC_DAILY_LIKES       Quota de likes par jour (défaut 15)
+  BC_SPAM_STRIKES_BAN  Tentatives de like AU-DELÀ du quota avant
+                       suspension automatique pour spam (défaut 30)
+  BC_DATA_DIR          Emplacement du dossier data (défaut ./data)
+  DATABASE_URL         URL de connexion PostgreSQL (requis en prod)
 
 Toutes sont lues dans backend/config.py — c'est le seul fichier à lire
 pour savoir ce qui est configurable.
 
+**Compatibilité ascendante** : les anciens noms `SJDA_*` sont encore lus en fallback
+si les nouveaux `BC_*` ne sont pas définis. Cela permet une migration douce
+des déploiements existants.
+
 
 ──────────────────────────────────────────────────────────────────────
-5. BASE DE DONNÉES (SQLite)
+5. BASE DE DONNÉES (PostgreSQL)
 ──────────────────────────────────────────────────────────────────────
 
 Schéma dans backend/db.py. Les tables :
 
   users      id, email (unique), password_hash + salt (PBKDF2-SHA256,
              200 000 itérations), name, is_admin, banned, approved,
-             last_seen (badge « actif récemment »), spam_strikes
+             last_seen (badge « actif récemment »), spam_strikes,
+             privacy_consent_at, privacy_version, created_at
   profiles   1-à-1 avec users : bio, classe, interests (JSON), intent
              (amis|couple|les_deux), gender, seeking, instagram,
              snapchat, whatsapp, age, invisible, photo (legacy, ancien
@@ -174,18 +178,17 @@ Trois niveaux d'accès (backend/auth.py) :
 
 AUTH & CONFIG
   POST /api/register        {email, password, name, invite_code?}
-                            → {token, user_id}. Règles : email d'un
-                            domaine autorisé OU email dans
-                            SJDA_ADMIN_EMAILS OU bon SJDA_MOD_CODE.
-                            Le bon code rend admin + validé d'office.
-                            Un mauvais code est IGNORÉ si le domaine
-                            est bon (inscription normale).
+                            → {token, user_id}. Règles : email valide
+                            OU email dans BC_ADMIN_EMAILS OU bon
+                            BC_MOD_CODE. Le bon code rend admin +
+                            validé d'office. Un mauvais code est
+                            IGNORÉ (inscription normale).
   POST /api/login           {email, password} → {token, user_id}.
                             Refuse les bannis. Promeut is_admin si
-                            l'email est dans SJDA_ADMIN_EMAILS (jamais
+                            l'email est dans BC_ADMIN_EMAILS (jamais
                             de rétrogradation ici).
-  GET  /api/config          {app_name, email_domains} — public, sert
-                            au hint du formulaire d'inscription.
+  GET  /api/config          {app_name, email_domains: [], support_email} — public,
+                            sert au hint du formulaire d'inscription.
 
 KYI (vérification d'identité — voir §7 le parcours complet)
   POST /api/kyi             multipart : full_name, birthdate, classe,
@@ -204,6 +207,8 @@ PROFIL
                             seeking, instagram, snapchat, whatsapp,
                             age, invisible. BLOQUÉ (403) tant que le
                             KYI n'est pas soumis (fonction require_kyi).
+                            Protection mineurs : intent "couple"
+                            refusé si age < 18.
   POST /api/profile/photo   multipart, ajoute une photo (max 6)
   DELETE /api/profile/photos/{photo_id}
   POST /api/account/delete  {password} — suppression définitive en
@@ -263,7 +268,7 @@ ADMIN (CurrentAdmin)
                             SUPPRIME le compte et sa carte KYI
   GET  /api/admin/reports   signalements (pending en premier)
   POST /api/admin/reports/{id}        {action: "ban"|"dismiss"}
-  GET  /api/admin/users     élèves validés
+  GET  /api/admin/users     étudiants validés
   POST /api/admin/users/{id}/ban      {banned: bool} — bannir coupe
                             les sessions immédiatement
   POST /api/admin/users/{id}/mod      {is_admin: bool}
@@ -283,7 +288,7 @@ LOGIQUE ANTI-SPAM (enforce_like_quota dans main.py)
   1. Compte les likes du jour (created_at >= start of day, heure UTC).
   2. Sous le quota : rien.
   3. Au-delà : +1 spam_strike (COMMIT MANUEL, voir §5) puis erreur 429.
-  4. strikes >= SJDA_SPAM_STRIKES_BAN : suspension automatique
+  4. strikes >= BC_SPAM_STRIKES_BAN : suspension automatique
      (ban_user), activité « 🤖 suspendu pour spam », push aux admins.
   Un admin peut rétablir le compte ; les strikes restent (cumulatifs).
 
@@ -291,21 +296,21 @@ NOTIFICATIONS PUSH ENVOYÉES
   • nouveau match → à la personne matchée
   • dossier KYI soumis → aux admins
   • nouveau signalement → aux admins
-  • inscription acceptée → à l'élève
+  • inscription acceptée → à l'étudiant
   • suspension auto pour spam → aux admins
   L'envoi part dans un thread (push.py), n'échoue jamais bruyamment,
   et nettoie les abonnements expirés (HTTP 404/410).
 
 
 ──────────────────────────────────────────────────────────────────────
-7. LE PARCOURS D'UN ÉLÈVE (à connaître par cœur)
+7. LE PARCOURS D'UN ÉTUDIANT (à connaître par cœur)
 ──────────────────────────────────────────────────────────────────────
 
-  1. Inscription (email étudiant obligatoire, code modo optionnel)
-  2. Écran KYI OBLIGATOIRE : nom officiel, date de naissance, classe,
-     photo de la carte d'étudiant. Le profil est verrouillé côté
+  1. Inscription (email libre, code modo optionnel)
+  2. Écran KYI OBLIGATOIRE : nom officiel, date de naissance, filière/classe,
+     photo de la carte étudiante IUT-FV. Le profil est verrouillé côté
      serveur tant que ce n'est pas soumis (require_kyi).
-  3. Écran d'attente. L'élève PEUT préparer son profil pendant ce
+  3. Écran d'attente. L'étudiant PEUT préparer son profil pendant ce
      temps. La page se met à jour seule (polling /api/me toutes les
      5 s) quand un admin accepte.
   4. Admin : notification push + demande dans le tableau de bord avec
@@ -313,16 +318,16 @@ NOTIFICATIONS PUSH ENVOYÉES
      (refuser = compte supprimé).
   5. Découverte : swipe ❤/✕, ↺ pour annuler, quota de likes, bannière
      « 👀 X personnes t'ont liké », badge « actif récemment », filtres
-     (âge, classe), mode invisible.
+     (âge, filière/classe), mode invisible.
   6. Match mutuel → écran « C'est un Match ! » → les réseaux sociaux
      de l'autre sont débloqués (liens directs Instagram / Snapchat /
      WhatsApp). La conversation se passe là-bas, pas dans l'app.
   7. Depuis la fiche match : ⚠️ Signaler et bloquer (ferme le match,
      alerte les modos).
 
-Côté admin (onglet 🛡 Modération, visible seulement pour is_admin) :
+Côté admin (onglet 🛡️ Administration, visible seulement pour is_admin) :
 stats, demandes d'inscription + KYI, signalements, fil d'activité en
-direct, liste des élèves (bannir / rétablir / promouvoir modo).
+direct, liste des étudiants (bannir / rétablir / promouvoir modo).
 
 
 ──────────────────────────────────────────────────────────────────────
@@ -338,7 +343,7 @@ app.js est une SPA artisanale :
 
 • ÉTAT : l'objet global `state` (token, userId, me, deck,
   currentDetail, ws, timers). Le jeton vit dans localStorage
-  (sjda_token). api() ajoute le Bearer automatiquement et déconnecte
+  (bc_token). api() ajoute le Bearer automatiquement et déconnecte
   sur 401.
 
 • SWIPE : renderDeck() affiche au plus 3 cartes empilées (la première
@@ -356,8 +361,8 @@ app.js est une SPA artisanale :
 • PWA : sw.js met la coquille en cache (network-first, fallback
   cache). ⚠ RÈGLE D'OR : à CHAQUE modification de style.css, app.js
   ou index.html déployée, INCRÉMENTE la constante CACHE dans sw.js
-  (sjda-v4 → sjda-v5). Sinon les utilisateurs garderont l'ancienne
-  version en cache.
+  (bc-connect-v1 → bc-connect-v2). Sinon les utilisateurs garderont
+  l'ancienne version en cache.
 
 • PUSH côté client : setupPush() → si déjà abonné, ré-enregistre ;
   sinon montre la cloche 🔔 (si permission pas refusée). Le clic
@@ -379,46 +384,36 @@ app.js est une SPA artisanale :
 ──────────────────────────────────────────────────────────────────────
 
 CHANGER LES COULEURS — un seul endroit : le bloc :root en tête de
-frontend/style.css. Charte actuelle (Institut Saint Jean, prise sur
-universitesaintjean.org) :
+frontend/style.css. Charte actuelle (IUT-FV Bandjoun) :
 
-  --grad     dégradé signature (auth, boutons, écran match, marque)
-             actuellement linear-gradient(45deg, #107EC2, #74226B)
-  --primary  #107EC2 (bleu IUSJ)   --accent  #FDD300 (jaune IUSJ)
-  --like     #2D7A3F (vert)        --pass    #CC151A (rouge)
-  --rewind   #FDD300               --bg / --card / --text / --muted /
-                                   --border : fonds et textes
+  --grad       dégradé signature (auth, boutons, écran match, marque)
+               actuellement linear-gradient(135deg, #007A3D, #004D2A)
+  --primary    #007A3D (vert principal)   --primary-2  #004D2A (vert profond)
+  --accent     #F5B800 (or)               --secondary  #004A99 (bleu)
+  --like       #007A3D                    --pass       #C0392B
+  --rewind     #F5B800
+  --bg / --card / --text / --muted / --border : fonds et textes
 
-  Tout le reste du CSS référence ces variables. Change-les, tout suit.
-  Pense aussi à : theme_color dans frontend/manifest.json ET la
-  <meta name="theme-color"> dans index.html (couleur de la barre
-  système du téléphone).
+Tout le reste du CSS référence ces variables. Change-les, tout suit.
+Pense aussi à : theme_color dans frontend/manifest.json ET la
+<meta name="theme-color"> dans index.html (couleur de la barre
+système du téléphone).
 
 CHANGER LE NOM DE L'APP — 4 endroits :
-  1. SJDA_APP_NAME (env) — nom côté serveur (notifications…)
+  1. BC_APP_NAME (env) — nom côté serveur (notifications…)
   2. frontend/manifest.json : "name" et "short_name" (nom sous
      l'icône installée)
   3. index.html : le <title>, les éléments .logo et .brand (le
-     "🔥 SJDA" affiché), et le tagline
-  4. sw.js : le titre par défaut des notifications ("SJDA")
-  (grep -ri "sjda" frontend/ pour n'en rater aucun)
+     "BC Connect" affiché), et le tagline
+  4. sw.js : le titre par défaut des notifications ("BC Connect")
+  (grep -ri "bc.connect\|BC Connect" frontend/ pour n'en rater aucun)
 
 CHANGER LE LOGO / LES ICÔNES :
   Remplace frontend/icons/icon-192.png et icon-512.png (PNG carrés).
-  Les icônes actuelles (cœur jaune sur dégradé bleu→violet) ont été
-  générées avec Pillow — script prêt à adapter :
+  Le logo source est frontend/icons/logo.svg (monogramme BC).
+  Script de génération fourni : generate_icons.py (adapté du DevKit §9).
 
-    from PIL import Image, ImageDraw
-    for size in (192, 512):
-        img = Image.new('RGB', (size, size))
-        d = ImageDraw.Draw(img)
-        c1, c2 = (16, 126, 194), (116, 34, 107)   # dégradé
-        for y in range(size):
-            t = y / size
-            d.line([(0, y), (size, y)],
-                   fill=tuple(int(a+(b-a)*t) for a, b in zip(c1, c2)))
-        # ... dessine ton logo ici ...
-        img.save(f'frontend/icons/icon-{size}.png')
+    python generate_icons.py
 
   Après changement d'icônes : bump du CACHE dans sw.js, et les
   utilisateurs devront parfois réinstaller la PWA pour voir la
@@ -436,7 +431,8 @@ CHANGER LES RÈGLES DU JEU :
   • fenêtre « actif récemment » : '-3 days' dans la requête discover
   • taille de pile : LIMIT 60 / candidates[:15] dans discover
   • âge autorisé : bornes 15-30 dans update_profile + input du HTML
-  • domaines email : SJDA_EMAIL_DOMAINS (env), rien à coder
+  • protection mineurs : intent "couple" refusé si age < 18
+  • domaines email : BC_EMAIL_DOMAINS (env), rien à coder
 
 
 ──────────────────────────────────────────────────────────────────────
@@ -450,26 +446,26 @@ hébergeurs ci-dessous le fournissent automatiquement.
 OPTION A — Render / Railway (le plus simple) :
   1. Connecte le repo GitHub → « Web Service ». Le Dockerfile est
      détecté et utilisé tel quel (uvicorn écoute sur $PORT).
-  2. Variables d'environnement : au minimum SJDA_ADMIN_EMAILS ;
-     recommandé : SJDA_MOD_CODE (long et imprévisible).
+  2. Variables d'environnement : au minimum BC_ADMIN_EMAILS ;
+     recommandé : BC_MOD_CODE (long et imprévisible).
   3. ⚠ LE PIÈGE CLASSIQUE : ajoute un DISQUE PERSISTANT monté sur
      /app/data (Render : "Disk" ; Railway : "Volume" ; Fly :
      "Volume"). Sans lui, CHAQUE redéploiement efface la base, les
      photos, les cartes KYI et les clés push. Si le point de montage
-     est ailleurs, pointe SJDA_DATA_DIR dessus.
+     est ailleurs, pointe BC_DATA_DIR dessus.
   4. Ouvre l'URL sur un téléphone → « Ajouter à l'écran d'accueil ».
 
 OPTION B — VPS (plus de contrôle) :
-  docker build -t sjda . && docker run -d -p 80:8000 \
-    -v /srv/sjda-data:/app/data \
-    -e SJDA_ADMIN_EMAILS=... -e SJDA_MOD_CODE=... sjda
+  docker build -t bc-connect . && docker run -d -p 80:8000 \
+    -v /srv/bc-connect-data:/app/data \
+    -e BC_ADMIN_EMAILS=... -e BC_MOD_CODE=... bc-connect
   + un reverse proxy TLS devant (Caddy est le plus simple : 2 lignes
   de Caddyfile et le HTTPS est automatique). Le WebSocket passe tout
   seul avec Caddy ; avec nginx, pense aux en-têtes Upgrade/Connection.
 
 SAUVEGARDES : cron qui copie data/ (la base se copie à chaud sans
 problème à cette échelle ; pour être puriste :
-sqlite3 data/sjda.db ".backup backup.db").
+pg_dump > backup.sql).
 
 MISES À JOUR : git pull → redéploiement. La base migre toute seule
 (MIGRATIONS). Bump le cache du service worker si le frontend a changé.
@@ -480,11 +476,11 @@ MISES À JOUR : git pull → redéploiement. La base migre toute seule
 ──────────────────────────────────────────────────────────────────────
 
 Quoi que tu modifies, préserve ces garanties. Elles sont le contrat
-moral de l'app vis-à-vis des élèves :
+moral de l'app vis-à-vis des étudiants :
 
   1. Les réseaux sociaux d'un profil ne sortent JAMAIS de l'API avant
      un match mutuel (paramètre socials de profile_dict).
-  2. Les cartes d'étudiant (data/kyi/) ne sont JAMAIS servies en
+  2. Les cartes étudiantes (data/kyi/) ne sont JAMAIS servies en
      statique — uniquement via l'endpoint admin authentifié.
   3. Le compteur « qui m'a liké » reste ANONYME.
   4. Refus d'inscription et suppression de compte EFFACENT les
@@ -499,6 +495,8 @@ moral de l'app vis-à-vis des élèves :
   8. Échappement HTML côté client : TOUT contenu utilisateur passe
      par escapeHtml() avant innerHTML (bio, noms, motifs…). Si tu
      affiches un nouveau champ utilisateur, échappe-le.
+  9. Protection mineurs : intent "couple" refusé si age < 18 (côté
+     serveur ET client).
 
 Limites connues (assumées, à toi de voir si tu veux les durcir) :
   • Pas de vérification que l'email appartient vraiment à la personne
@@ -516,20 +514,20 @@ Limites connues (assumées, à toi de voir si tu veux les durcir) :
 ──────────────────────────────────────────────────────────────────────
 
 En local avec des quotas réduits pour aller vite :
-  SJDA_ADMIN_EMAILS=admin@x.com SJDA_DAILY_LIKES=2 \
-  SJDA_SPAM_STRIKES_BAN=3 uvicorn backend.main:app --port 8000
+  BC_ADMIN_EMAILS=admin@x.com BC_DAILY_LIKES=2 \
+  BC_SPAM_STRIKES_BAN=3 uvicorn backend.main:app --port 8000
 
-  □ Inscription email non autorisé → refusée avec la liste des domaines
-  □ Inscription email étudiant → écran KYI, profil bloqué (PUT → 403)
+  □ Inscription email quelconque → acceptée, écran KYI, profil bloqué (PUT → 403)
   □ Soumission KYI → écran d'attente, profil débloqué
   □ Admin : demande visible avec dossier + carte consultable
-  □ Accepter → l'écran de l'élève se débloque seul (≤ 5 s)
+  □ Accepter → l'écran de l'étudiant se débloque seul (≤ 5 s)
   □ Refuser → compte supprimé, carte effacée de data/kyi/
   □ Swipe mutuel → « C'est un Match ! » → réseaux visibles des 2 côtés
   □ 3e like du jour → 429 ; insister 3 fois → suspension auto + fil admin
   □ Mode invisible → absent du deck des autres, swipe bloqué
   □ Signalement depuis la fiche match → match fermé, alerte admin
   □ Suppression de compte → login impossible, fichiers effacés
+  □ Mineur (< 18 ans) tente intent "couple" → refusé
   □ Sur téléphone (HTTPS) : installation PWA + réception d'un push
 
 Il y a aussi des tests Playwright d'exemple dans l'historique du
@@ -540,18 +538,17 @@ projet ; l'app se teste très bien en headless (Chromium).
 13. IDÉES D'ÉVOLUTION (par ordre de valeur)
 ──────────────────────────────────────────────────────────────────────
 
-  1. RECYCLAGE DES « PASSÉS » : dans une école, le deck s'épuise vite.
+  1. RECYCLAGE DES « PASSÉS » : dans un campus, le deck s'épuise vite.
      Fais expirer les swipes liked=0 après ~3 semaines (un DELETE
      périodique ou un filtre sur created_at dans discover). ATTENTION :
      ne recycle jamais les paires issues d'un signalement (elles ont
      un swipe liked=0 dans les DEUX sens — c'est le marqueur de
      blocage ; exclue les paires mutuelles du recyclage).
-  2. Vérification email par lien (nécessite SMTP).
-  3. Filtre par centres d'intérêt.
-  4. Statistiques d'usage pour l'admin (matchs/jour, rétention).
-  5. PostgreSQL + stockage objet si > ~1000 utilisateurs actifs.
+  2. Filtre par centres d'intérêt.
+  3. Statistiques d'usage pour l'admin (matchs/jour, rétention).
+  4. PostgreSQL + stockage objet si > ~1000 utilisateurs actifs.
 
 Bon code, et prends soin de cette app — elle va créer des amitiés
-(et peut-être plus) bien réelles. 💙💛
+(et peut-être plus) bien réelles. 💚💛
 
-                                        — L'équipe de développement SJDA
+                                        — L'équipe de développement BC Connect
