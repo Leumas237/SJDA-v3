@@ -10,7 +10,7 @@ KYI_DIR = DATA_DIR / "kyi"
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("BC_DATABASE_URL", os.environ.get("SJDA_DATABASE_URL", ""))
 
 APP_NAME = os.environ.get("BC_APP_NAME", os.environ.get("SJDA_APP_NAME", "BC Connect"))
-SUPPORT_EMAIL = os.environ.get("BC_SUPPORT_EMAIL", os.environ.get("SJDA_SUPPORT_EMAIL", "support@bc-connect.app"))
+SUPPORT_EMAIL = os.environ.get("BC_SUPPORT_EMAIL", os.environ.get("SJDA_SUPPORT_EMAIL", "sjda.beta@protonmail.com"))
 
 # Vérification établissement : l'inscription est LIBRE (sans restriction de domaine).
 # Le contrôle d'appartenance à l'IUT-FV se fait via le KYI obligatoire (carte étudiante).

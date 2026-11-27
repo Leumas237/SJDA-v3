@@ -59,7 +59,7 @@ Démarrage sans Docker : `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`.
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `BC_APP_NAME` | `BC Connect` | Nom affiché de l'app |
-| `BC_SUPPORT_EMAIL` | `support@bc-connect.app` | Adresse de support affichée dans l'application |
+| `BC_SUPPORT_EMAIL` | `sjda.beta@protonmail.com` | Adresse de support affichée dans l'application |
 | `BC_EMAIL_DOMAINS` | *(vide)* | Domaines email autorisés (vide = inscription libre). La validation se fait via KYI. |
 | `BC_MOD_CODE` | *(vide)* | Code modérateur secret : fourni à l'inscription, il rend le compte modo (et permet de s'inscrire sans email étudiant). Vide = désactivé |
 | `BC_ADMIN_EMAILS` | *(vide)* | Emails toujours admins (promus à la connexion si besoin) |

@@ -98,7 +98,7 @@ navigation privée, avec des emails quelconques (inscription libre).
 ──────────────────────────────────────────────────────────────────────
 
   BC_APP_NAME          Nom de l'app côté serveur (défaut "BC Connect")
-  BC_SUPPORT_EMAIL     Email support affiché dans l'app (défaut "support@bc-connect.app")
+  BC_SUPPORT_EMAIL     Email support affiché dans l'app (défaut "sjda.beta@protonmail.com")
   BC_EMAIL_DOMAINS     Domaines email autorisés à l'inscription,
                        séparés par des virgules. Défaut : vide = inscription libre.
                        Le contrôle d'appartenance IUT-FV se fait via KYI.
