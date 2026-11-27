@@ -1,5 +1,5 @@
 /* Service worker BC Connect : cache de la coquille de l'app (network-first) */
-const CACHE = "bc-connect-v1";
+const CACHE = "bc-connect-v2";
 const SHELL = [
   "/",
   "/static/style.css",
